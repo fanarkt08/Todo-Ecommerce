@@ -2,7 +2,9 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 20px;
+    /* L'en-tête fait 60 px de haut (App.css) : padding vertical inclus dans cette hauteur */
+    padding: 0 20px;
+    box-sizing: border-box;
     background-color: #4b6cb7;
     color: white;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);

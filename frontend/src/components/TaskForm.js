@@ -1,37 +1,53 @@
 import React, { useState } from "react";
 import api from "../api";
+import { authHeaders, getErrorMessage } from "../utils/errors";
 
-const TaskForm = ({ addTask }) => {
+/**
+ * Formulaire d'ajout d'une tâche.
+ * Bugs corrigés (E27) :
+ * - un titre vide (ou fait d'espaces) était envoyé à l'API : erreur 500 ou ligne vide ;
+ * - en cas d'erreur, rien ne s'affichait.
+ *
+ * @param {{ addTask: (task: object) => void, onAuthError: (err: unknown) => boolean }} props
+ *   addTask : ajoute la tâche créée à la liste ; onAuthError : gère une session expirée
+ */
+const TaskForm = ({ addTask, onAuthError }) => {
   const [title, setTitle] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const token = localStorage.getItem("token");
+    const trimmed = title.trim();
+    if (!trimmed) {
+      setError("Le titre de la tâche ne peut pas être vide.");
+      return;
+    }
+    setError("");
+    setLoading(true);
     try {
-      const res = await api.post(
-        "/tasks",
-        { title },
-        {
-          headers: { "x-auth-token": token },
-        }
-      );
+      const res = await api.post("/tasks", { title: trimmed }, { headers: authHeaders() });
       addTask(res.data);
       setTitle("");
     } catch (err) {
-      console.error(err);
+      if (!onAuthError(err)) setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="form-group">
+    <form onSubmit={handleSubmit} className="form-group" noValidate>
       <input
         type="text"
         placeholder="Ajouter une tâche ..."
+        maxLength={200}
         value={title}
         onChange={(e) => setTitle(e.target.value)}
       />
-      <button type="submit" className="btn" style={{ marginTop: "10px" }}>
-        Ajouter Tâche
+      {error && <p className="alert alert-error field-error" role="alert">{error}</p>}
+      <button type="submit" className="btn" style={{ marginTop: "10px" }} disabled={loading}>
+        {loading ? "Ajout..." : "Ajouter Tâche"}
       </button>
     </form>
   );

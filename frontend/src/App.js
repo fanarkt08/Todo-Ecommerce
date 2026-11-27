@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   BrowserRouter as Router,
   Route,
@@ -7,25 +7,20 @@ import {
 } from "react-router-dom";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
-
-// La page n'a pas de style cohérent
-// => ajouter un fichier CSS pour gérer les styles de la page
-// => importer le fichier CSS dans le composant App
 import "./App.css";
 import Tasks from "./pages/Tasks";
 import Header from "./components/Header";
 import Footer from "./components/Footer";
 
-// Comment pourrait-on gérer les routes protégées qui nécessitent d'être connecté ?
+/**
+ * Composant racine : état de connexion et routes de l'application.
+ * La page /tasks est protégée par le composant Tasks lui-même (redirection vers
+ * /login sans token valide).
+ */
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(
     !!localStorage.getItem("token")
   );
-
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    setIsAuthenticated(!!token);
-  }, []);
 
   const handleLogin = () => setIsAuthenticated(true);
 
@@ -37,15 +32,18 @@ function App() {
   return (
     <Router>
       <div className="App">
-        <header className="header">
-          <Header isAuthenticated={isAuthenticated} onLogout={handleLogout} />
-        </header>
+        {/* Bug corrigé (E27) : Header était entouré d'un second <header> (en-tête en double) */}
+        <Header isAuthenticated={isAuthenticated} onLogout={handleLogout} />
         <main>
           <Routes>
-            <Route path="/" element={<Navigate to="/login" />} />
+            <Route
+              path="/"
+              element={<Navigate to={isAuthenticated ? "/tasks" : "/login"} />}
+            />
             <Route path="/login" element={<Login onLogin={handleLogin} />} />
             <Route path="/register" element={<Register />} />
-            <Route path="/tasks" element={<Tasks />} />
+            <Route path="/tasks" element={<Tasks onLogout={handleLogout} />} />
+            <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </main>
         <Footer />

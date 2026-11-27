@@ -78,13 +78,106 @@ h1 {
   color: #aaa;
 }
 
-.task-item button {
+.task-title {
+  flex: 1;
+  margin-right: 12px;
+  word-break: break-word;
+}
+
+.task-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.task-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.task-edit input {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.btn-small {
   border: none;
-  background: #dc3545;
   color: white;
   padding: 5px 10px;
   border-radius: 4px;
+  font-size: 13px;
   cursor: pointer;
+}
+
+.btn-primary { background: #007bff; }
+.btn-success { background: #28a745; }
+.btn-secondary { background: #6c757d; }
+.btn-danger { background: #dc3545; }
+
+.btn:disabled {
+  background-color: #7fb3ec;
+  cursor: not-allowed;
+}
+
+/* Messages affichés à l'utilisateur (erreurs, confirmations) */
+.alert {
+  padding: 10px 14px;
+  border-radius: 4px;
+  margin: 0 0 16px;
+  font-size: 14px;
+}
+
+.alert-error {
+  background: #fdecea;
+  color: #a12622;
+  border: 1px solid #f5c2c0;
+}
+
+.alert-success {
+  background: #e8f5e9;
+  color: #1e6b2a;
+  border: 1px solid #b9dfbe;
+}
+
+.field-error {
+  margin: 8px 0 0;
+}
+
+.form-footer {
+  text-align: center;
+  margin: 16px 0 0;
+  font-size: 14px;
+  color: #555;
+}
+
+.form-footer a {
+  color: #007bff;
+}
+
+.empty-state {
+  text-align: center;
+  color: #888;
+  margin: 24px 0 0;
+}
+
+/* Bouton « Déconnexion » présenté comme les liens de la barre de navigation */
+.nav-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: white;
+  font: inherit;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+header nav ul li a:hover,
+.nav-button:hover {
+  text-decoration: underline;
 }
 
 header {
