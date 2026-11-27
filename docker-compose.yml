@@ -18,6 +18,9 @@ services:
       retries: 5
 
   backend:
+    # Images construites par la CI et publiées sur GHCR. Tag : "local" sur le poste,
+    # APP_ENV (prod / preprod) sur le serveur, ou IMAGE_TAG=sha-<commit> pour un rollback.
+    image: ghcr.io/fanarkt08/todo-ecommerce-backend:${IMAGE_TAG:-${APP_ENV:-local}}
     build: ./backend
     restart: unless-stopped
     env_file:
@@ -35,6 +38,7 @@ services:
       - "5000:5000"
 
   frontend:
+    image: ghcr.io/fanarkt08/todo-ecommerce-frontend:${IMAGE_TAG:-${APP_ENV:-local}}
     build: ./frontend
     restart: unless-stopped
     depends_on:

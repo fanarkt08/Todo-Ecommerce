@@ -1,0 +1,231 @@
+name: CI/CD Hetzner
+
+# develop -> pré-production : https://todo-ecommerce-preprod.duckdns.org
+# master  -> production     : https://todo-ecommerce.duckdns.org
+# Pull request vers develop ou master : tests uniquement, aucun déploiement.
+on:
+  push:
+    branches: [develop, master]
+  pull_request:
+    branches: [develop, master]
+
+# Moindre privilège : chaque job ne reçoit que les droits dont il a besoin.
+permissions:
+  contents: read
+
+env:
+  IMAGE_PREFIX: ghcr.io/fanarkt08/todo-ecommerce
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Installation des dépendances et tests
+  # ---------------------------------------------------------------------------
+  test:
+    name: Installation et tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Backend - installation des dépendances
+        working-directory: backend
+        run: npm ci
+
+      - name: Frontend - installation des dépendances
+        working-directory: frontend
+        run: npm ci
+
+      # Non bloquant tant que les dépendances vulnérables ne sont pas mises à jour (E28)
+      - name: Audit de sécurité des dépendances (non bloquant)
+        continue-on-error: true
+        run: |
+          (cd backend && npm audit --omit=dev)
+          (cd frontend && npm audit --omit=dev)
+
+      - name: Frontend - tests unitaires
+        working-directory: frontend
+        env:
+          CI: true
+        run: npm test -- --watchAll=false --passWithNoTests
+
+      # Démarre toute l'application (MongoDB + backend + frontend) comme en local
+      # et vérifie qu'elle répond réellement.
+      - name: Test d'intégration - stack Docker complète
+        run: |
+          echo "JWT_SECRET=secret-de-test-ci" > backend/.env
+          docker compose up -d --build --wait
+
+          for _ in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/tasks || true)
+            [ "$code" = "401" ] && break
+            sleep 2
+          done
+          echo "GET /api/tasks sans token -> $code (attendu : 401)"
+          [ "$code" = "401" ]
+
+          curl -sf http://localhost:3000/ | grep -q "<title>"
+          curl -sf -H 'Content-Type: application/json' \
+            -d '{"username":"ci-user","password":"ci-password"}' \
+            http://localhost:3000/api/auth/register | grep -q '"token"'
+          echo "Frontend, API et MongoDB OK"
+
+      - name: Logs des conteneurs en cas d'échec
+        if: failure()
+        run: docker compose logs
+
+  # ---------------------------------------------------------------------------
+  # 2. Construction des images Docker et publication sur GHCR (push uniquement)
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build et push des images
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      env: ${{ steps.cible.outputs.env }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Environnement cible
+        id: cible
+        run: |
+          if [ "$GITHUB_REF_NAME" = "master" ]; then
+            echo "env=prod" >> "$GITHUB_OUTPUT"
+          else
+            echo "env=preprod" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Connexion à GitHub Container Registry
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      # Deux tags par image : l'environnement (prod / preprod), utilisé par le serveur,
+      # et le commit (sha-...), qui permet de revenir à une version précise (rollback).
+      - name: Build et push des images backend et frontend
+        env:
+          ENV_NAME: ${{ steps.cible.outputs.env }}
+          SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          for svc in backend frontend; do
+            docker build \
+              --label "org.opencontainers.image.source=$SOURCE_URL" \
+              -t "$IMAGE_PREFIX-$svc:$ENV_NAME" \
+              -t "$IMAGE_PREFIX-$svc:sha-$GITHUB_SHA" \
+              "./$svc"
+            docker push --all-tags "$IMAGE_PREFIX-$svc"
+          done
+
+  # ---------------------------------------------------------------------------
+  # 3. Déploiement sur le serveur Hetzner, puis vérification en HTTPS
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Déploiement (${{ needs.build.outputs.env }})
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    environment:
+      name: ${{ needs.build.outputs.env }}
+      url: ${{ steps.params.outputs.url }}
+    # Jamais deux déploiements simultanés sur le même environnement
+    concurrency:
+      group: deploy-${{ needs.build.outputs.env }}
+      cancel-in-progress: false
+    steps:
+      - name: Paramètres de l'environnement
+        id: params
+        env:
+          ENV_NAME: ${{ needs.build.outputs.env }}
+        run: |
+          if [ "$ENV_NAME" = "prod" ]; then
+            dir=Todo-Ecommerce; branch=master; domain=todo-ecommerce.duckdns.org
+          else
+            dir=Todo-Ecommerce-preprod; branch=develop; domain=todo-ecommerce-preprod.duckdns.org
+          fi
+          {
+            echo "dir=$dir"
+            echo "branch=$branch"
+            echo "domain=$domain"
+            echo "url=https://$domain"
+          } >> "$GITHUB_OUTPUT"
+
+      # Clé SSH de l'utilisateur alpha + empreinte du serveur (pas de StrictHostKeyChecking=no)
+      - name: Configuration SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      # Le script est envoyé sur l'entrée standard de SSH : le token GHCR n'apparaît
+      # jamais dans la liste des processus du serveur.
+      - name: Déploiement sur le serveur
+        env:
+          SSH_TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DIR: ${{ steps.params.outputs.dir }}
+          BRANCH: ${{ steps.params.outputs.branch }}
+          ENV_NAME: ${{ needs.build.outputs.env }}
+        run: |
+          {
+            printf 'DIR=%q BRANCH=%q ENV_NAME=%q GH_ACTOR=%q GH_TOKEN=%q\n' \
+              "$DIR" "$BRANCH" "$ENV_NAME" "$GITHUB_ACTOR" "$GH_TOKEN"
+            cat <<'SCRIPT'
+          set -euo pipefail
+          cd ~/"$DIR"
+
+          echo "==> Mise à jour du code (branche $BRANCH)"
+          git fetch --prune origin
+          git checkout "$BRANCH"
+          git pull --ff-only origin "$BRANCH"
+
+          echo "==> Récupération des images ($ENV_NAME)"
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
+          docker compose pull backend frontend
+          docker logout ghcr.io
+
+          echo "==> Redémarrage des services"
+          docker compose up -d --remove-orphans
+
+          if [ "$ENV_NAME" = "prod" ]; then
+            echo "==> Reverse proxy Caddy (commun aux deux environnements)"
+            cd deploy/caddy
+            docker compose up -d
+            docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile \
+              || echo "Reload ignoré : Caddy vient de démarrer avec la nouvelle configuration"
+            cd ~/"$DIR"
+          fi
+
+          docker image prune -f
+          docker compose ps
+          SCRIPT
+          } | ssh "$SSH_TARGET" bash -s
+
+      - name: Vérification après déploiement (HTTPS)
+        env:
+          DOMAIN: ${{ steps.params.outputs.domain }}
+        run: |
+          for _ in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://$DOMAIN/api/tasks" || true)
+            [ "$code" = "401" ] && break
+            sleep 2
+          done
+          echo "https://$DOMAIN/api/tasks -> $code (attendu : 401)"
+          [ "$code" = "401" ]
+          curl -sf "https://$DOMAIN/" | grep -q "<title>"
+          echo "Déploiement de https://$DOMAIN OK"
