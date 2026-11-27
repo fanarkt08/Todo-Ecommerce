@@ -3,6 +3,17 @@
 # Let's Encrypt (validation HTTP sur le port 80) et redirige HTTP -> HTTPS.
 
 (securite) {
+	# Logs d'accès (IP client, méthode, URL, code, durée, domaine) en JSON.
+	# Le token JWT (en-tête X-Auth-Token) est supprimé avant écriture.
+	log {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>headers>X-Auth-Token delete
+			}
+		}
+	}
 	encode gzip
 	header {
 		Strict-Transport-Security "max-age=31536000"

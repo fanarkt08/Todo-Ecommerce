@@ -2,6 +2,23 @@ const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const Task = require('../models/Task');
+const { audit } = require('../config/logger');
+
+/**
+ * Journalise une modification de tâche. Si la tâche appartient à un autre
+ * utilisateur, l'événement passe en "warn" : c'est la trace d'un accès à la
+ * tâche de quelqu'un d'autre (faille IDOR, voir commentaires ci-dessous).
+ */
+function auditTaskChange(req, event, task) {
+  const ownerId = String(task.user);
+  const foreign = ownerId !== req.user.id;
+  audit(
+    req,
+    event,
+    { userId: req.user.id, taskId: String(task._id), ownerId, ...(foreign && { reason: 'not_owner' }) },
+    foreign ? 'warn' : 'info'
+  );
+}
 
 // @route   GET api/tasks
 // @desc    Get all user tasks
@@ -10,7 +27,7 @@ router.get('/', auth, async (req, res) => {
     const tasks = await Task.find({ user: req.user.id }).sort({ createdAt: -1 });
     res.json(tasks);
   } catch (err) {
-    console.error(err.message);
+    req.log.error({ err }, 'Erreur lors de la lecture des tâches');
     res.status(500).send('Server Error');
   }
 });
@@ -29,9 +46,10 @@ router.post('/', auth, async (req, res) => {
     });
 
     const task = await newTask.save();
+    audit(req, 'task.create', { userId: req.user.id, taskId: String(task._id) });
     res.json(task);
   } catch (err) {
-    console.error(err.message);
+    req.log.error({ err }, 'Erreur lors de la création de la tâche');
     res.status(500).send('Server Error');
   }
 });
@@ -46,13 +64,14 @@ router.put('/:id', auth, async (req, res) => {
   try {
     let task = await Task.findById(req.params.id);
     if (!task) return res.status(404).json({ msg: 'Task not found' });
+    auditTaskChange(req, 'task.update', task);
 
     task = await Task.findByIdAndUpdate(req.params.id, { $set: { title, description, isCompleted } }, { new: true });
-    
+
     // Ici c'est corrigé, mais c'est un bug courant à surveiller.
     res.json(task);
   } catch (err) {
-    console.error(err.message);
+    req.log.error({ err }, 'Erreur lors de la modification de la tâche');
     res.status(500).send('Server Error');
   }
 });
@@ -64,12 +83,13 @@ router.delete('/:id', auth, async (req, res) => {
   try {
     let task = await Task.findById(req.params.id);
     if (!task) return res.status(404).json({ msg: 'Task not found' });
+    auditTaskChange(req, 'task.delete', task);
 
     await Task.findByIdAndRemove(req.params.id);
 
     res.json({ msg: 'Task removed' });
   } catch (err) {
-    console.error(err.message);
+    req.log.error({ err }, 'Erreur lors de la suppression de la tâche');
     res.status(500).send('Server Error');
   }
 });

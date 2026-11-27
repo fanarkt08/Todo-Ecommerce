@@ -1,7 +1,16 @@
+# Journalisation de tous les services : logs JSON collectés par Docker,
+# rotation à 10 Mo, 5 fichiers conservés par conteneur (50 Mo max).
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   mongo:
     image: mongo:8
     restart: unless-stopped
+    logging: *default-logging
     environment:
       # Compte admin créé au 1er démarrage (volume vide). Sans .env à la racine : pas d'auth (local).
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-}
@@ -23,6 +32,7 @@ services:
     image: ghcr.io/fanarkt08/todo-ecommerce-backend:${IMAGE_TAG:-${APP_ENV:-local}}
     build: ./backend
     restart: unless-stopped
+    logging: *default-logging
     env_file:
       # Local : backend/.env. Serveur : .env à la racine (prioritaire).
       - path: ./backend/.env
@@ -41,6 +51,7 @@ services:
     image: ghcr.io/fanarkt08/todo-ecommerce-frontend:${IMAGE_TAG:-${APP_ENV:-local}}
     build: ./frontend
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
       - backend
     ports:

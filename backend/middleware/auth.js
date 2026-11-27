@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const { audit } = require('../config/logger');
 
 module.exports = function (req, res, next) {
   // Get token from header
@@ -14,6 +15,8 @@ module.exports = function (req, res, next) {
     req.user = decoded.user;
     next();
   } catch (err) {
+    // Token expiré, falsifié ou signé avec un autre secret
+    audit(req, 'auth.invalid_token', { reason: err.name }, 'warn');
     res.status(418).json({ msg: 'Token is not valid' });
   }
 };

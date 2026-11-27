@@ -3,6 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { audit } = require('../config/logger');
 
 // @route   POST api/auth/register
 // @desc    Register a new user
@@ -17,6 +18,7 @@ router.post('/register', async (req, res) => {
   try {
     let user = await User.findOne({ username });
     if (user) {
+      audit(req, 'auth.register_failed', { username, reason: 'user_exists' }, 'warn');
       return res.status(400).json({ msg: 'User already exists' });
     }
 
@@ -26,6 +28,7 @@ router.post('/register', async (req, res) => {
     user.password = await bcrypt.hash(password, salt);
 
     await user.save();
+    audit(req, 'auth.register', { userId: user.id, username });
 
     const payload = { user: { id: user.id } };
     jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: 3600 }, (err, token) => {
@@ -33,7 +36,7 @@ router.post('/register', async (req, res) => {
       res.json({ token });
     });
   } catch (err) {
-    console.error(err.message);
+    req.log.error({ err }, "Erreur lors de l'inscription");
     res.status(500).send('Server Error');
   }
 });
@@ -47,14 +50,17 @@ router.post('/login', async (req, res) => {
     // Le message d'erreur est trop générique et ne guide pas l'utilisateur.
     let user = await User.findOne({ username });
     if (!user) {
+      audit(req, 'auth.login_failed', { username, reason: 'unknown_user' }, 'warn');
       return res.status(400).json({ msg: 'Invalid credentials' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
+      audit(req, 'auth.login_failed', { userId: user.id, username, reason: 'wrong_password' }, 'warn');
       return res.status(400).json({ msg: 'Invalid credentials' });
     }
 
+    audit(req, 'auth.login_success', { userId: user.id, username });
     const payload = { user: { id: user.id } };
     // La durée de vie du token est peut-être trop longue pour certaines applications.
     jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: 3600 }, (err, token) => {
@@ -62,7 +68,7 @@ router.post('/login', async (req, res) => {
       res.json({ token });
     });
   } catch (err) {
-    console.error(err.message);
+    req.log.error({ err }, 'Erreur lors de la connexion');
     res.status(500).send('Server Error');
   }
 });
