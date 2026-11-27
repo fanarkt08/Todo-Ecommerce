@@ -1,0 +1,25 @@
+# Surcharge pour le serveur (prod et préprod), activée par COMPOSE_FILE dans le .env :
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.server.yml
+#
+# - Aucun port publié : seul Caddy (deploy/caddy) est exposé, sur 80/443.
+# - Le frontend rejoint le réseau "proxy" sous le nom <APP_ENV>-frontend
+#   (prod-frontend, preprod-frontend), que Caddy utilise pour router chaque domaine.
+
+services:
+  mongo:
+    ports: !reset []
+
+  backend:
+    ports: !reset []
+
+  frontend:
+    ports: !reset []
+    networks:
+      default:
+      proxy:
+        aliases:
+          - ${APP_ENV:?APP_ENV doit valoir prod ou preprod dans le .env}-frontend
+
+networks:
+  proxy:
+    external: true

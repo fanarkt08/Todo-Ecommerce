@@ -1,0 +1,28 @@
+# Reverse proxy unique devant les deux environnements.
+# Pour chaque domaine, Caddy obtient et renouvelle automatiquement un certificat
+# Let's Encrypt (validation HTTP sur le port 80) et redirige HTTP -> HTTPS.
+
+(securite) {
+	encode gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
+
+# Production
+todo-ecommerce.duckdns.org {
+	import securite
+	reverse_proxy prod-frontend:80
+}
+
+# Pré-production (qualification)
+todo-ecommerce-preprod.duckdns.org {
+	import securite
+	# La préprod ne doit pas être indexée par les moteurs de recherche
+	header X-Robots-Tag "noindex, nofollow"
+	reverse_proxy preprod-frontend:80
+}
