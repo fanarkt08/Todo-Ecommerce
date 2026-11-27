@@ -2,6 +2,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const mongoose = require('mongoose');
 const connectDB = require('./config/db');
 const { logger, httpLogger } = require('./config/logger');
 
@@ -26,6 +27,20 @@ app.set('trust proxy', 'loopback, linklocal, uniquelocal');
 app.use(httpLogger);
 app.use(cors());
 app.use(express.json());
+
+/**
+ * GET /api/health - point de contrôle pour la supervision (Prometheus / blackbox).
+ * 200 si l'API répond et que MongoDB est connecté, 503 sinon.
+ * Aucune donnée sensible : uniquement l'état des composants.
+ */
+app.get('/api/health', (req, res) => {
+  const dbUp = mongoose.connection.readyState === 1;
+  res.status(dbUp ? 200 : 503).json({
+    status: dbUp ? 'ok' : 'degraded',
+    db: dbUp ? 'up' : 'down',
+    uptime: Math.round(process.uptime()),
+  });
+});
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));

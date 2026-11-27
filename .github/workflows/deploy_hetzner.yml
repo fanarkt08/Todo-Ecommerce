@@ -225,6 +225,17 @@ jobs:
             docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile \
               || echo "Reload ignoré : Caddy vient de démarrer avec la nouvelle configuration"
             cd ~/"$DIR"
+
+            if [ -f deploy/monitoring/.env ]; then
+              echo "==> Supervision (Prometheus, Alertmanager, Grafana)"
+              cd deploy/monitoring
+              docker compose up -d
+              docker compose kill -s HUP prometheus    # recharge config et règles d'alerte
+              docker compose restart alertmanager      # régénère la config email
+              cd ~/"$DIR"
+            else
+              echo "Supervision non configurée (deploy/monitoring/.env absent) : étape ignorée"
+            fi
           fi
 
           docker image prune -f

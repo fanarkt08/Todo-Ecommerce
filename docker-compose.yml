@@ -11,6 +11,9 @@ services:
     image: mongo:8
     restart: unless-stopped
     logging: *default-logging
+    # Cache limité à 256 Mo (par défaut ~50 % de la RAM) : deux environnements
+    # et la supervision partagent un serveur de 4 Go.
+    command: ["--wiredTigerCacheSizeGB", "0.25"]
     environment:
       # Compte admin créé au 1er démarrage (volume vide). Sans .env à la racine : pas d'auth (local).
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-}

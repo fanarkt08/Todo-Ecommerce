@@ -44,6 +44,8 @@ const httpLogger = pinoHttp({
   logger,
   // Les logs écrits pendant la requête (audit, erreurs) portent seulement "reqId"
   quietReqLogger: true,
+  // Les sondes de supervision (toutes les 15 s) ne polluent pas les logs
+  autoLogging: { ignore: (req) => req.url === '/api/health' },
   genReqId: (req, res) => {
     const id = req.headers['x-request-id'] || crypto.randomUUID();
     res.setHeader('X-Request-Id', id);

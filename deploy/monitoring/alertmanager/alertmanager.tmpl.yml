@@ -1,0 +1,34 @@
+# Alertmanager : envoi des alertes par email.
+# Modèle sans secret : les valeurs __...__ sont remplacées au démarrage du
+# conteneur par celles du fichier .env du serveur (voir docker-compose.yml).
+global:
+  smtp_smarthost: "__SMTP_SMARTHOST__"
+  smtp_from: "__SMTP_FROM__"
+  smtp_auth_username: "__SMTP_USER__"
+  smtp_auth_password_file: /tmp/smtp_password
+  smtp_require_tls: __SMTP_REQUIRE_TLS__
+
+route:
+  receiver: email
+  # Une alerte par problème et par environnement
+  group_by: [alertname, env, host]
+  group_wait: 30s
+  group_interval: 5m
+  # Rappel toutes les 4 h tant que le problème n'est pas résolu
+  repeat_interval: 4h
+
+# Si un site est complètement en panne, inutile d'envoyer en plus les
+# alertes secondaires (latence, certificat...) du même environnement.
+inhibit_rules:
+  - source_matchers: [severity="critical", env=~".+"]
+    target_matchers: [severity="warning"]
+    equal: [env]
+
+receivers:
+  - name: email
+    email_configs:
+      - to: "__ALERT_EMAIL_TO__"
+        # Un second email est envoyé quand le problème est résolu
+        send_resolved: true
+        headers:
+          Subject: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}{{ with .CommonLabels.env }} ({{ . }}){{ end }}'

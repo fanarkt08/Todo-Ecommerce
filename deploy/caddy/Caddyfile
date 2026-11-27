@@ -2,6 +2,13 @@
 # Pour chaque domaine, Caddy obtient et renouvelle automatiquement un certificat
 # Let's Encrypt (validation HTTP sur le port 80) et redirige HTTP -> HTTPS.
 
+{
+	# Métriques Prometheus (requêtes, codes de réponse, durées) séparées par domaine
+	metrics {
+		per_host
+	}
+}
+
 (securite) {
 	# Logs d'accès (IP client, méthode, URL, code, durée, domaine) en JSON.
 	# Le token JWT (en-tête X-Auth-Token) est supprimé avant écriture.
@@ -36,4 +43,10 @@ todo-ecommerce-preprod.duckdns.org {
 	# La préprod ne doit pas être indexée par les moteurs de recherche
 	header X-Robots-Tag "noindex, nofollow"
 	reverse_proxy preprod-frontend:80
+}
+
+# Métriques pour Prometheus (supervision), uniquement sur le réseau Docker interne :
+# le port 2020 n'est pas publié, il n'est donc pas accessible depuis Internet.
+:2020 {
+	metrics
 }

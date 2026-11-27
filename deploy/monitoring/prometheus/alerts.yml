@@ -1,0 +1,98 @@
+# Règles d'alerte, valables pour la prod et la préprod (label "env").
+# "for" : durée pendant laquelle la condition doit rester vraie avant l'envoi
+# de l'alerte, pour éviter les fausses alertes sur un incident de quelques secondes.
+groups:
+  - name: disponibilite
+    rules:
+      - alert: SiteInaccessible
+        expr: probe_success{job="blackbox-http", check="frontend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "[{{ $labels.env }}] Site inaccessible"
+          description: "{{ $labels.instance }} ne répond pas correctement (HTTPS, code 200 et page attendue) depuis plus de 2 minutes."
+
+      - alert: ApiOuBaseDeDonneesEnPanne
+        expr: probe_success{job="blackbox-http", check="api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "[{{ $labels.env }}] API ou MongoDB en panne"
+          description: "{{ $labels.instance }} ne renvoie pas 200 avec la base connectée depuis plus de 2 minutes."
+
+      - alert: LatenceElevee
+        expr: probe_duration_seconds{job="blackbox-http"} > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "[{{ $labels.env }}] Temps de réponse supérieur à 500 ms"
+          description: "{{ $labels.instance }} répond en {{ $value | humanizeDuration }} depuis plus de 5 minutes."
+
+      - alert: CertificatBientotExpire
+        expr: (probe_ssl_earliest_cert_expiry{job="blackbox-http"} - time()) / 86400 < 14
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "[{{ $labels.env }}] Certificat HTTPS bientôt expiré"
+          description: "Le certificat de {{ $labels.instance }} expire dans {{ $value | printf \"%.0f\" }} jours : le renouvellement automatique de Caddy (prévu 30 jours avant) a échoué."
+
+  - name: erreurs
+    rules:
+      - alert: TauxErreurs5xxEleve
+        expr: |
+          sum by (host) (rate(caddy_http_request_duration_seconds_count{code=~"5.."}[5m]))
+            / sum by (host) (rate(caddy_http_request_duration_seconds_count[5m]))
+            > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "[{{ $labels.host }}] Plus de 5 % d'erreurs serveur"
+          description: "{{ $value | humanizePercentage }} des requêtes vers {{ $labels.host }} renvoient une erreur 5xx depuis plus de 5 minutes."
+
+  - name: serveur
+    rules:
+      - alert: DisquePresquePlein
+        expr: |
+          1 - node_filesystem_avail_bytes{mountpoint="/", fstype!~"tmpfs|overlay"}
+            / node_filesystem_size_bytes{mountpoint="/", fstype!~"tmpfs|overlay"}
+            > 0.85
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disque du serveur rempli à plus de 85 %"
+          description: "Disque utilisé à {{ $value | humanizePercentage }}. Un disque plein fait planter Docker et MongoDB : nettoyer avec docker system prune."
+
+      - alert: MemoireSaturee
+        expr: 1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes > 0.9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Mémoire du serveur utilisée à plus de 90 %"
+          description: "Mémoire utilisée à {{ $value | humanizePercentage }} depuis plus de 10 minutes."
+
+      - alert: CpuSature
+        expr: 1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) > 0.9
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU du serveur utilisé à plus de 90 %"
+          description: "CPU utilisé à {{ $value | humanizePercentage }} depuis plus de 15 minutes."
+
+  - name: supervision
+    rules:
+      - alert: CibleDeSupervisionInjoignable
+        expr: up == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus ne joint plus {{ $labels.job }}"
+          description: "La cible {{ $labels.instance }} ({{ $labels.job }}) ne répond plus depuis 5 minutes : la supervision est partiellement aveugle."

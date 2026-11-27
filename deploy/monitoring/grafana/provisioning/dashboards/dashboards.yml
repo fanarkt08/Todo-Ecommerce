@@ -1,0 +1,11 @@
+apiVersion: 1
+
+# Tableaux de bord versionnés dans le repo (grafana/dashboards), chargés au démarrage.
+providers:
+  - name: todo-ecommerce
+    folder: Todo-Ecommerce
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/dashboards

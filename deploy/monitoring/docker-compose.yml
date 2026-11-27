@@ -1,0 +1,104 @@
+# Supervision commune à la prod et à la préprod.
+# Lancement sur le serveur : cd deploy/monitoring && docker compose up -d
+# (nécessite deploy/monitoring/.env, voir .env.example)
+#
+# Aucun port n'est exposé sur Internet : les interfaces web ne sont joignables
+# que depuis le serveur lui-même (127.0.0.1), via un tunnel SSH :
+#   ssh -i ~/.ssh/todo_ecommerce_alpha -L 3001:localhost:3001 -L 9090:localhost:9090 -L 9093:localhost:9093 alpha@91.99.213.26
+#   Grafana : http://localhost:3001   Prometheus : http://localhost:9090   Alertmanager : http://localhost:9093
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.15.1
+    restart: unless-stopped
+    logging: *default-logging
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      # Historique limité pour ne pas remplir le disque
+      - --storage.tsdb.retention.time=15d
+      - --storage.tsdb.retention.size=1GB
+    volumes:
+      - ./prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks:
+      - default
+      # Pour lire les métriques de Caddy (caddy:2020)
+      - proxy
+
+  alertmanager:
+    image: prom/alertmanager:v0.34.2
+    restart: unless-stopped
+    logging: *default-logging
+    env_file: .env
+    # Génère la configuration réelle à partir du modèle et des secrets du .env
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        umask 077
+        printf '%s' "$$SMTP_PASSWORD" > /tmp/smtp_password
+        sed -e "s|__SMTP_SMARTHOST__|$$SMTP_SMARTHOST|" \
+            -e "s|__SMTP_FROM__|$$SMTP_FROM|" \
+            -e "s|__SMTP_USER__|$$SMTP_USER|" \
+            -e "s|__SMTP_REQUIRE_TLS__|$${SMTP_REQUIRE_TLS:-true}|" \
+            -e "s|__ALERT_EMAIL_TO__|$$ALERT_EMAIL_TO|" \
+            /etc/alertmanager/alertmanager.tmpl.yml > /tmp/alertmanager.yml
+        exec /bin/alertmanager --config.file=/tmp/alertmanager.yml --storage.path=/alertmanager
+    volumes:
+      - ./alertmanager:/etc/alertmanager:ro
+      - alertmanager-data:/alertmanager
+    ports:
+      - "127.0.0.1:9093:9093"
+
+  blackbox:
+    image: prom/blackbox-exporter:v0.29.1
+    restart: unless-stopped
+    logging: *default-logging
+    command: ["--config.file=/etc/blackbox/blackbox.yml"]
+    volumes:
+      - ./blackbox:/etc/blackbox:ro
+
+  node-exporter:
+    image: prom/node-exporter:v1.12.1
+    restart: unless-stopped
+    logging: *default-logging
+    command: ["--path.rootfs=/host"]
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+
+  grafana:
+    image: grafana/grafana:13.2.6
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD manquant dans .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_SERVER_ROOT_URL: http://localhost:3001
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:3001:3000"
+
+networks:
+  proxy:
+    external: true
+
+volumes:
+  prometheus-data:
+  alertmanager-data:
+  grafana-data:
