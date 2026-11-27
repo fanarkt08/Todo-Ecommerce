@@ -11,7 +11,8 @@ Ce projet utilise Node.js et MongoDB. Assurez-vous qu'ils sont installés sur vo
 
 ### a. Backend
 
-Le backend lit sa configuration dans `backend/.env` (fichier jamais commité) :
+Le backend lit sa configuration dans `backend/.env` (fichier jamais commité), à créer à partir du modèle :
+`cp backend/.env.example backend/.env`, puis renseigner `JWT_SECRET`.
 
 ```bash
 MONGO_URI=mongodb://localhost:27017/exam_practice_db

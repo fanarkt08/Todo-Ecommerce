@@ -7,7 +7,9 @@ indique le commit correspondant.
 
 ## [Non publié]
 
-Aucune évolution en attente de déploiement.
+### Ajouté
+
+- Modèles de configuration sans secret : `backend/.env.example` (développement local) et `.env.example` (environnement du serveur, prod ou préprod), en plus de `deploy/monitoring/.env.example` (supervision).
 
 ## [1.2.0] - 2026-11-27
 
