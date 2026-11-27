@@ -7,6 +7,12 @@ indique le commit correspondant.
 
 ## [Non publié]
 
+Aucune évolution en attente de déploiement.
+
+## [1.2.0] - 2026-11-27
+
+Corrections de sécurité (E28), tests automatisés et documentation générée (E29), déployés en préproduction puis en production (commit `60cf209`).
+
 ### Sécurité : failles corrigées (E28)
 
 Failles détectées avec un script d'attaque sur l'API (deux comptes, injections, token
@@ -96,6 +102,7 @@ Première mise en production (commit `c09b013`).
 - Supervision Prometheus / Grafana et alertes par email (Alertmanager).
 - Route `GET /api/health` pour la supervision.
 
-[Non publié]: https://github.com/fanarkt08/Todo-Ecommerce/compare/072e1c4...develop
+[Non publié]: https://github.com/fanarkt08/Todo-Ecommerce/compare/60cf209...develop
+[1.2.0]: https://github.com/fanarkt08/Todo-Ecommerce/compare/072e1c4...60cf209
 [1.1.0]: https://github.com/fanarkt08/Todo-Ecommerce/compare/c09b013...072e1c4
 [1.0.0]: https://github.com/fanarkt08/Todo-Ecommerce/commit/c09b013
