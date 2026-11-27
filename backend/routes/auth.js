@@ -1,18 +1,48 @@
+/**
+ * Routes d'authentification, montées sur `/api/auth` (voir app.js).
+ * Les deux routes sont protégées contre la force brute (10 échecs maximum par IP
+ * en 15 minutes) et écrivent leurs événements dans le journal d'audit.
+ * @module routes/auth
+ */
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const { audit } = require('../config/logger');
+const { JWT_ALGORITHM, JWT_EXPIRES_IN, authRateLimiter } = require('../config/security');
 
 /** Lit un champ texte du corps de la requête (chaîne vide s'il est absent ou d'un autre type). */
 const readField = (body, name) => (typeof body[name] === 'string' ? body[name] : '');
 
-// @route   POST api/auth/register
-// @desc    Register a new user
-// Bug corrigé (E27) : les champs vides, les noms d'utilisateur trop courts et les
-// mots de passe d'un caractère étaient acceptés.
-router.post('/register', async (req, res) => {
+/**
+ * **POST /api/auth/register** : crée un compte et renvoie un token de session.
+ *
+ * Corps JSON attendu : `{ "username": string, "password": string }`
+ * - `username` : 3 à 30 caractères, unique (les espaces au début et à la fin sont retirés) ;
+ * - `password` : 6 caractères minimum, stocké uniquement sous forme hachée (bcrypt).
+ *
+ * Réponses :
+ * - `200 { token }` : JWT signé en HS256, valable 1 h, à envoyer ensuite dans l'en-tête `x-auth-token` ;
+ * - `400 { msg }` : champ manquant ou invalide, ou nom d'utilisateur déjà utilisé ;
+ * - `429 { msg }` : trop d'échecs depuis la même IP (10 en 15 minutes) ;
+ * - `500` : erreur serveur (le détail est dans les logs, pas dans la réponse).
+ *
+ * Journal d'audit : `auth.register` (succès) et `auth.register_failed` (nom déjà pris).
+ * Bug corrigé (E27) : les champs vides, les noms trop courts et les mots de passe
+ * d'un caractère étaient acceptés.
+ *
+ * @name register
+ * @function
+ * @memberof module:routes/auth
+ * @param {express.Request} req - requête Express (corps JSON ci-dessus)
+ * @param {express.Response} res - réponse Express
+ * @example
+ * curl -X POST https://todo-ecommerce.duckdns.org/api/auth/register \
+ *   -H "Content-Type: application/json" -d '{"username":"alice","password":"secret123"}'
+ * // => 200 {"token":"eyJhbGciOiJIUzI1NiIs..."}
+ */
+router.post('/register', authRateLimiter, async (req, res) => {
   const username = readField(req.body, 'username').trim();
   const password = readField(req.body, 'password');
 
@@ -42,19 +72,38 @@ router.post('/register', async (req, res) => {
     audit(req, 'auth.register', { userId: user.id, username });
 
     const payload = { user: { id: user.id } };
-    jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: 3600 }, (err, token) => {
-      if (err) throw err;
-      res.json({ token });
-    });
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { algorithm: JWT_ALGORITHM, expiresIn: JWT_EXPIRES_IN });
+    res.json({ token });
   } catch (err) {
     req.log.error({ err }, "Erreur lors de l'inscription");
     res.status(500).send('Server Error');
   }
 });
 
-// @route   POST api/auth/login
-// @desc    Authenticate user & get token
-router.post('/login', async (req, res) => {
+/**
+ * **POST /api/auth/login** : vérifie les identifiants et renvoie un token de session.
+ *
+ * Corps JSON attendu : `{ "username": string, "password": string }`
+ *
+ * Réponses :
+ * - `200 { token }` : JWT signé en HS256, valable 1 h ;
+ * - `400 { msg }` : champ manquant, ou identifiants incorrects. Le message est le même
+ *   que le compte existe ou non, pour ne pas révéler quels noms sont inscrits ;
+ * - `429 { msg }` : trop d'échecs depuis la même IP (10 en 15 minutes) ;
+ * - `500` : erreur serveur.
+ *
+ * Seules des chaînes de caractères sont acceptées : un objet comme `{"$ne": null}`
+ * (injection NoSQL) est traité comme un champ vide.
+ * Journal d'audit : `auth.login_success` et `auth.login_failed` (raison : `unknown_user`
+ * ou `wrong_password`).
+ *
+ * @name login
+ * @function
+ * @memberof module:routes/auth
+ * @param {express.Request} req - requête Express (corps JSON ci-dessus)
+ * @param {express.Response} res - réponse Express
+ */
+router.post('/login', authRateLimiter, async (req, res) => {
   const username = readField(req.body, 'username').trim();
   const password = readField(req.body, 'password');
 
@@ -81,11 +130,9 @@ router.post('/login', async (req, res) => {
 
     audit(req, 'auth.login_success', { userId: user.id, username });
     const payload = { user: { id: user.id } };
-    // La durée de vie du token est peut-être trop longue pour certaines applications.
-    jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: 3600 }, (err, token) => {
-      if (err) throw err;
-      res.json({ token });
-    });
+    // Token valable 1 h et signé avec un algorithme imposé (voir config/security.js)
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { algorithm: JWT_ALGORITHM, expiresIn: JWT_EXPIRES_IN });
+    res.json({ token });
   } catch (err) {
     req.log.error({ err }, 'Erreur lors de la connexion');
     res.status(500).send('Server Error');

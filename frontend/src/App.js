@@ -1,4 +1,8 @@
-import React, { useState } from "react";
+/**
+ * Composant racine de l'application React : état de connexion, en-tête, routes et pied de page.
+ * @module frontend/App
+ */
+import React, { useCallback, useState } from "react";
 import {
   BrowserRouter as Router,
   Route,
@@ -22,15 +26,19 @@ function App() {
     !!localStorage.getItem("token")
   );
 
-  const handleLogin = () => setIsAuthenticated(true);
+  // Fonctions stables (useCallback) : recréées à chaque rendu, elles relançaient le
+  // chargement de la page Tâches pendant la déconnexion, qui redirigeait une seconde
+  // fois vers /login sans le message « session expirée » / « déconnecté ».
+  const handleLogin = useCallback(() => setIsAuthenticated(true), []);
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     localStorage.removeItem("token");
     setIsAuthenticated(false);
-  };
+  }, []);
 
   return (
-    <Router>
+    // Comportements de React Router v7 activés à l'avance (préparation de la migration, voir CHANGELOG)
+    <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <div className="App">
         {/* Bug corrigé (E27) : Header était entouré d'un second <header> (en-tête en double) */}
         <Header isAuthenticated={isAuthenticated} onLogout={handleLogout} />

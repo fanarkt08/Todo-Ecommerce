@@ -1,3 +1,7 @@
+/**
+ * Connexion à la base MongoDB (Mongoose).
+ * @module config/db
+ */
 const mongoose = require('mongoose');
 const { logger } = require('./logger');
 
@@ -8,6 +12,12 @@ mongoose.connection.on('disconnected', () => dbLogger.warn('MongoDB déconnecté
 mongoose.connection.on('reconnected', () => dbLogger.info('MongoDB reconnecté'));
 mongoose.connection.on('error', (err) => dbLogger.error({ err }, 'Erreur MongoDB'));
 
+/**
+ * Se connecte à MongoDB avec l'URI `MONGO_URI` (identifiants inclus en production).
+ * En cas d'échec au démarrage, le serveur s'arrête (code 1) : Docker le relance.
+ * Les coupures et reconnexions ultérieures sont journalisées.
+ * @returns {Promise<void>}
+ */
 const connectDB = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI, {

@@ -1,3 +1,7 @@
+/**
+ * Page de la liste des tâches (/tasks), réservée aux utilisateurs connectés.
+ * @module frontend/pages/Tasks
+ */
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api";
@@ -12,7 +16,8 @@ import { authHeaders, getErrorMessage } from "../utils/errors";
  * - session expirée : page vide et erreur JavaScript non gérée, sans redirection ;
  * - aucune erreur affichée à l'utilisateur (seulement dans la console).
  *
- * @param {{ onLogout: () => void }} props - onLogout : déconnecte l'utilisateur dans App
+ * @param {Object} props
+ * @param {function(): void} props.onLogout - déconnecte l'utilisateur dans App (session expirée)
  */
 const Tasks = ({ onLogout }) => {
   const [tasks, setTasks] = useState([]);

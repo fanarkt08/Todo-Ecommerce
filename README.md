@@ -11,6 +11,15 @@ Ce projet utilise Node.js et MongoDB. Assurez-vous qu'ils sont installés sur vo
 
 ### a. Backend
 
+Le backend lit sa configuration dans `backend/.env` (fichier jamais commité) :
+
+```bash
+MONGO_URI=mongodb://localhost:27017/exam_practice_db
+# Au moins 32 caractères, sinon le serveur refuse de démarrer. Pour en générer un :
+# openssl rand -hex 64
+JWT_SECRET=<secret aléatoire>
+```
+
 ```bash
 # Allez dans le dossier du backend
 cd backend
@@ -37,6 +46,35 @@ npm install
 npm start
 # L'application s'ouvrira sur http://localhost:3000
 ```
+
+### c. Tests automatisés
+
+```bash
+# Tests de l'API (Jest + Supertest) : nécessitent MongoDB sur localhost:27017
+cd backend && npm test
+
+# Tests des composants React (React Testing Library)
+cd frontend && npm test
+```
+
+### d. Documentation du code
+
+```bash
+# Génère la documentation HTML à partir des commentaires JSDoc :
+# routes de l'API, middleware, modèles, configuration et composants React
+cd backend && npm run docs
+# Ouvrir backend/docs/index.html
+```
+
+### e. Avec Docker
+
+```bash
+# Depuis la racine du projet (MongoDB, backend et frontend)
+docker compose up --build
+# L'application est disponible sur http://localhost:3000
+```
+
+L'historique des corrections (bugs et failles de sécurité) est dans [CHANGELOG.md](CHANGELOG.md).
 
 ---
 

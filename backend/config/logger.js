@@ -1,3 +1,7 @@
+/**
+ * Journalisation : logs applicatifs (Pino), logs des requêtes HTTP et journal d'audit.
+ * @module config/logger
+ */
 const crypto = require('crypto');
 const pino = require('pino');
 const pinoHttp = require('pino-http');
@@ -74,7 +78,7 @@ const httpLogger = pinoHttp({
  * depuis quelle IP. Chaque ligne porte "audit": true, ce qui permet de les
  * isoler facilement : docker compose logs backend | grep '"audit":true'
  *
- * @param {import('express').Request} req - requête en cours (fournit l'IP et l'identifiant de requête)
+ * @param {express.Request} req - requête en cours (fournit l'IP et l'identifiant de requête)
  * @param {string} event - nom de l'événement, ex. "auth.login_failed"
  * @param {object} [details] - informations utiles (jamais de mot de passe ni de token)
  * @param {'info'|'warn'} [level='info'] - "warn" pour les échecs et tentatives suspectes

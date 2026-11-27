@@ -1,3 +1,7 @@
+/**
+ * Barre de navigation de l'application.
+ * @module frontend/components/Header
+ */
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import "./Header.css";
@@ -8,6 +12,11 @@ import "./Header.css";
  * - la déconnexion laissait l'utilisateur sur la liste des tâches ;
  * - aucun lien ne menait à la page d'inscription ;
  * - le bouton « Déconnexion » n'avait pas le style des autres liens.
+ *
+ * @param {Object} props
+ * @param {boolean} props.isAuthenticated - affiche « Mes Tâches / Déconnexion » si vrai,
+ *   « Connexion / Inscription » sinon
+ * @param {function(): void} props.onLogout - déconnecte l'utilisateur dans App
  */
 const Header = ({ isAuthenticated, onLogout }) => {
   const navigate = useNavigate();

@@ -1,3 +1,7 @@
+/**
+ * Page de connexion (/login).
+ * @module frontend/pages/Login
+ */
 import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import api from "../api";
@@ -10,7 +14,11 @@ import { getErrorMessage } from "../utils/errors";
  * - aucun lien vers l'inscription ;
  * - aucun message après une inscription, une déconnexion ou une session expirée.
  *
- * @param {{ onLogin?: () => void }} props - onLogin : prévient App que l'utilisateur est connecté
+ * @param {Object} props
+ * @param {function(): void} [props.onLogin] - prévient App que l'utilisateur est connecté
+ *
+ * La page affiche aussi le message transmis par une autre page dans `location.state`
+ * (`{ message, type: "success" | "error" }`) : compte créé, déconnexion, session expirée.
  */
 const Login = ({ onLogin }) => {
   const [username, setUsername] = useState("");

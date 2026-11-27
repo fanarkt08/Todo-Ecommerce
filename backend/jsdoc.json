@@ -1,0 +1,15 @@
+{
+  "source": {
+    "include": ["app.js", "server.js", "config", "middleware", "models", "routes", "../frontend/src"],
+    "includePattern": "\\.js$",
+    "excludePattern": "\\.test\\.js$"
+  },
+  "opts": {
+    "destination": "docs",
+    "recurse": true,
+    "encoding": "utf8",
+    "readme": "../README.md"
+  },
+  "plugins": ["plugins/markdown"],
+  "templates": { "default": { "outputSourceFiles": false } }
+}

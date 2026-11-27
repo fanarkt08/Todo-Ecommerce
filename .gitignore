@@ -2,3 +2,5 @@
 node_modules/
 build/
 .DS_Store
+# Documentation générée par JSDoc (npm run docs)
+backend/docs/

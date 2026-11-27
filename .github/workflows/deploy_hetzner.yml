@@ -23,6 +23,17 @@ jobs:
   test:
     name: Installation et tests
     runs-on: ubuntu-latest
+    # Base MongoDB pour les tests de l'API (port 27018 : le 27017 sert au test d'intégration)
+    services:
+      mongo:
+        image: mongo:8
+        ports:
+          - 27018:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ ping: 1 })'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v5
 
@@ -42,24 +53,50 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      # Non bloquant tant que les dépendances vulnérables ne sont pas mises à jour (E28)
-      - name: Audit de sécurité des dépendances (non bloquant)
-        continue-on-error: true
-        run: |
-          (cd backend && npm audit --omit=dev)
-          (cd frontend && npm audit --omit=dev)
+      # Bloquant : le backend n'a plus aucune faille connue, toute nouvelle faille
+      # haute ou critique arrête le pipeline (E28)
+      - name: Backend - audit de sécurité des dépendances
+        working-directory: backend
+        run: npm audit --omit=dev --audit-level=high
 
-      - name: Frontend - tests unitaires
+      # Bloquant sur les failles critiques. Les failles hautes restantes concernent les
+      # outils de compilation de react-scripts, absents de l'image (voir CHANGELOG)
+      - name: Frontend - audit de sécurité des dépendances
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=critical
+
+      # Tests de l'API : authentification, validation, IDOR, tokens falsifiés, CORS, force brute
+      - name: Backend - tests de l'API (Jest + Supertest)
+        working-directory: backend
+        env:
+          MONGO_URI_TEST: mongodb://127.0.0.1:27018
+        run: npm test
+
+      # Documentation générée à partir des commentaires JSDoc du code (API, modèles,
+      # composants React) (E29), téléchargeable depuis la page de l'exécution (Artifacts)
+      - name: Génération de la documentation du code (JSDoc)
+        working-directory: backend
+        run: npm run docs
+
+      - name: Publication de la documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: backend/docs
+
+      # Tests des composants React : validation des formulaires, messages, liens
+      - name: Frontend - tests des composants (React Testing Library)
         working-directory: frontend
         env:
           CI: true
-        run: npm test -- --watchAll=false --passWithNoTests
+        run: npm test -- --watchAll=false
 
       # Démarre toute l'application (MongoDB + backend + frontend) comme en local
       # et vérifie qu'elle répond réellement.
       - name: Test d'intégration - stack Docker complète
         run: |
-          echo "JWT_SECRET=secret-de-test-ci" > backend/.env
+          # Secret aléatoire : le backend refuse de démarrer avec moins de 32 caractères
+          echo "JWT_SECRET=$(openssl rand -hex 32)" > backend/.env
           docker compose up -d --build --wait
 
           for _ in $(seq 1 30); do
@@ -126,18 +163,20 @@ jobs:
             docker push --all-tags "$IMAGE_PREFIX-$svc"
           done
 
-      # Audit de sécurité des images publiées : paquets système (Alpine, Node, nginx)
-      # et dépendances npm, vulnérabilités HIGH et CRITICAL. Non bloquant pour
-      # l'instant (dépendances à mettre à jour, E28) : ajouter --exit-code 1 pour bloquer.
-      - name: Audit des images Docker avec Trivy (non bloquant)
-        continue-on-error: true
+      # Audit de sécurité des images publiées : paquets système (Alpine, nginx) et
+      # dépendances npm. Rapport des failles HIGH et CRITICAL ; le déploiement est
+      # bloqué si une faille CRITICAL a un correctif disponible (E28).
+      - name: Audit des images Docker avec Trivy
         env:
           ENV_NAME: ${{ steps.cible.outputs.env }}
         run: |
           for svc in backend frontend; do
             echo "::group::Trivy - $svc"
-            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v trivy-cache:/root/.cache \
               aquasec/trivy:0.76.2 image --severity HIGH,CRITICAL --no-progress \
+              "$IMAGE_PREFIX-$svc:$ENV_NAME"
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v trivy-cache:/root/.cache \
+              aquasec/trivy:0.76.2 image --severity CRITICAL --ignore-unfixed --exit-code 1 --no-progress --quiet \
               "$IMAGE_PREFIX-$svc:$ENV_NAME"
             echo "::endgroup::"
           done

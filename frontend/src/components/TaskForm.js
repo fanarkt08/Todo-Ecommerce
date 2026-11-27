@@ -1,3 +1,7 @@
+/**
+ * Formulaire d'ajout d'une tâche.
+ * @module frontend/components/TaskForm
+ */
 import React, { useState } from "react";
 import api from "../api";
 import { authHeaders, getErrorMessage } from "../utils/errors";
@@ -8,8 +12,10 @@ import { authHeaders, getErrorMessage } from "../utils/errors";
  * - un titre vide (ou fait d'espaces) était envoyé à l'API : erreur 500 ou ligne vide ;
  * - en cas d'erreur, rien ne s'affichait.
  *
- * @param {{ addTask: (task: object) => void, onAuthError: (err: unknown) => boolean }} props
- *   addTask : ajoute la tâche créée à la liste ; onAuthError : gère une session expirée
+ * @param {Object} props
+ * @param {function(Object): void} props.addTask - ajoute la tâche créée (réponse de l'API) à la liste
+ * @param {function(*): boolean} props.onAuthError - traite une session expirée (401) ;
+ *   renvoie true si l'erreur a été prise en charge
  */
 const TaskForm = ({ addTask, onAuthError }) => {
   const [title, setTitle] = useState("");
